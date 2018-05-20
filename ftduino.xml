@@ -308,25 +308,27 @@
   <!-- translations don't work. This would require extra magic -->
   <exec>
       import ftduino_direct as ftd
+      import threading
     
       def __init__(self, parent):
         self.parent = parent
         print("ftDuino plugin init", parent)
         self.ftduino = self.ftd.ftduino()
         self.__ultrasonic_enabled = False
-
+        self.__ftduino_lock = threading.RLock()
 
       def __ultrasonic_enable(self, enable):
         if enable != self.__ultrasonic_enabled:
             self.__ultrasonic_enabled = enable
             self.ftduino.comm("ultrasonic_enable " + ("true" if enable else "false"))
-	
+
       # this function is invoked from the button from javascript side
       def check(self, str):
-        if self.ftduino.getDevice() == None:
-          self.parent.tx(json.dumps( { "plugin:ftduino:check_reply": None } ))
-        else:
-          self.parent.tx(json.dumps( { "plugin:ftduino:check_reply": self.ftduino.comm("ftduino_id_get") } ))
+        with self.__ftduino_lock:
+          if self.ftduino.getDevice() == None:
+            self.parent.tx(json.dumps( { "plugin:ftduino:check_reply": None } ))
+          else:
+            self.parent.tx(json.dumps( { "plugin:ftduino:check_reply": self.ftduino.comm("ftduino_id_get") } ))
 
       # a plugin may implement a init functon which is called whenever a program is
       # being started
@@ -334,42 +336,50 @@
         pass
 
       def input_get(self, a, b):
-        self.ftduino.comm("input_set_mode "+b+" "+a)
-        result=self.ftduino.comm("input_get "+b)
-        return int(result)
+        with self.__ftduino_lock:
+          self.ftduino.comm("input_set_mode "+b+" "+a)
+          result=self.ftduino.comm("input_get "+b)
+          return int(result)
 
       def output_set(self, a, b):
-        self.ftduino.comm("output_set "+a+" 1 "+str(int(5.12*b)))
+        with self.__ftduino_lock:
+          self.ftduino.comm("output_set "+a+" 1 "+str(int(5.12*b)))
 
       def motor_set(self, a, b, c):
-        self.ftduino.comm("motor_set "+a+" "+b+" "+str(int(5.12*c)))
+        with self.__ftduino_lock:
+          self.ftduino.comm("motor_set "+a+" "+b+" "+str(int(5.12*c)))
 
       def led_set(self, a):
-        self.ftduino.comm("LED_set "+str(int(bool(a))))
+        with self.__ftduino_lock:
+          self.ftduino.comm("LED_set "+str(int(bool(a))))
 
       def counter_get(self, a):
-        if a == "C1":
+        with self.__ftduino_lock:
+          if a == "C1":
             self.__ultrasonic_enable(False)
-        result=self.ftduino.comm("counter_get "+a)
-        return int(result)
+          result=self.ftduino.comm("counter_get "+a)
+          return int(result)
 
       def counter_reset(self, a):
-        if a == "C1":
+        with self.__ftduino_lock:
+          if a == "C1":
             self.__ultrasonic_enable(False)
-        self.ftduino.comm("counter_set_mode " + a + " rising")
-        self.ftduino.comm("counter_clear " + a)
+          self.ftduino.comm("counter_set_mode " + a + " rising")
+          self.ftduino.comm("counter_clear " + a)
 
       def distance_get(self):
-        self.__ultrasonic_enable(True)
-        result=self.ftduino.comm("ultrasonic_get")
-        return int(result)
+        with self.__ftduino_lock:
+          self.__ultrasonic_enable(True)
+          result=self.ftduino.comm("ultrasonic_get")
+          return int(result)
 
       # a plugin may implement a cleanup functon which is called whenever a program
       # has ended
       def cleanup(self):
-        # switch off all outputs
-        for o in range(8):
-          self.ftduino.comm("output_set O"+str(o+1)+" 0 0");
+        with self.__ftduino_lock:
+          # switch off all outputs
+          for o in range(8):
+            self.ftduino.comm("output_set O"+str(o+1)+" 0 0");
 
   </exec>
 </plugin>
